@@ -1,5 +1,6 @@
 use crate::summary::templates;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use tauri::Runtime;
 use tracing::{info, warn};
 
@@ -176,6 +177,63 @@ pub async fn api_get_template_full<R: Runtime>(
     })
 }
 
+/// Saves a custom template override to the user's data directory.
+///
+/// Validates the JSON before writing. The template_id becomes the filename
+/// (e.g., "daily_standup" → "daily_standup.json"). Writing a custom template
+/// with an existing bundled ID overrides it for this user.
+#[tauri::command]
+pub async fn api_save_custom_template<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    template_id: String,
+    template_json: String,
+) -> Result<(), String> {
+    info!("api_save_custom_template called for template_id: {}", template_id);
+
+    // Validate before writing
+    templates::validate_and_parse_template(&template_json)?;
+
+    let custom_dir = templates::get_custom_templates_dir()
+        .ok_or_else(|| "Could not determine custom templates directory".to_string())?;
+
+    fs::create_dir_all(&custom_dir)
+        .map_err(|e| format!("Failed to create templates directory: {}", e))?;
+
+    let template_path = custom_dir.join(format!("{}.json", template_id));
+    fs::write(&template_path, template_json.as_bytes())
+        .map_err(|e| format!("Failed to write template file: {}", e))?;
+
+    info!("Saved custom template '{}' to {:?}", template_id, template_path);
+    Ok(())
+}
+
+/// Deletes the custom template override for the given template_id.
+///
+/// Used to "Reset to Default" — removes the user's custom file so the
+/// bundled or built-in version is used again. No-ops if no custom file exists.
+#[tauri::command]
+pub async fn api_delete_custom_template<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    template_id: String,
+) -> Result<(), String> {
+    info!("api_delete_custom_template called for template_id: {}", template_id);
+
+    let custom_dir = templates::get_custom_templates_dir()
+        .ok_or_else(|| "Could not determine custom templates directory".to_string())?;
+
+    let template_path = custom_dir.join(format!("{}.json", template_id));
+
+    if template_path.exists() {
+        fs::remove_file(&template_path)
+            .map_err(|e| format!("Failed to delete custom template: {}", e))?;
+        info!("Deleted custom template override for '{}'", template_id);
+    } else {
+        info!("No custom override found for '{}', nothing to delete", template_id);
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,5 +285,38 @@ mod tests {
             assert!(!section.instruction.is_empty(),
                 "Section '{}' has empty instruction", section.title);
         }
+    }
+
+    #[test]
+    fn test_validate_and_parse_round_trip() {
+        let json = r#"{
+            "name": "My Custom Template",
+            "description": "Custom description",
+            "sections": [
+                {
+                    "title": "Notes",
+                    "instruction": "Write your notes here",
+                    "format": "paragraph"
+                }
+            ]
+        }"#;
+        let result = templates::validate_and_parse_template(json);
+        assert!(result.is_ok());
+        let tmpl = result.unwrap();
+        assert_eq!(tmpl.name, "My Custom Template");
+        assert_eq!(tmpl.sections.len(), 1);
+    }
+
+    #[test]
+    fn test_validate_template_invalid_format_rejected() {
+        let json = r#"{
+            "name": "Bad Template",
+            "description": "desc",
+            "sections": [{"title": "S", "instruction": "I", "format": "badformat"}]
+        }"#;
+        let result = templates::validate_and_parse_template(json);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("invalid format"), "Expected invalid format error, got: {}", err);
     }
 }
