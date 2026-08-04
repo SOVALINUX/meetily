@@ -32,6 +32,27 @@ pub struct TemplateDetails {
     pub sections: Vec<String>,
 }
 
+/// Full section data for template editing UI
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemplateSectionFull {
+    pub title: String,
+    pub instruction: String,
+    pub format: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub example_item_format: Option<String>,
+}
+
+/// Full template data including all section fields, for the editor UI
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemplateFullDetails {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub sections: Vec<TemplateSectionFull>,
+}
+
 /// Lists all available templates
 ///
 /// Returns templates from both built-in (embedded) and custom (user data directory) sources.
@@ -123,6 +144,38 @@ pub async fn api_validate_template<R: Runtime>(
     }
 }
 
+/// Returns the complete template structure for editing in the UI.
+/// Unlike api_get_template_details which returns only section titles,
+/// this returns all editable fields per section.
+#[tauri::command]
+pub async fn api_get_template_full<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    template_id: String,
+) -> Result<TemplateFullDetails, String> {
+    info!("api_get_template_full called for template_id: {}", template_id);
+
+    let template = templates::get_template(&template_id)?;
+
+    let sections: Vec<TemplateSectionFull> = template
+        .sections
+        .into_iter()
+        .map(|s| TemplateSectionFull {
+            title: s.title,
+            instruction: s.instruction,
+            format: s.format,
+            item_format: s.item_format,
+            example_item_format: s.example_item_format,
+        })
+        .collect();
+
+    Ok(TemplateFullDetails {
+        id: template_id,
+        name: template.name,
+        description: template.description,
+        sections,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,5 +216,16 @@ mod tests {
 
         let result = templates::validate_and_parse_template(invalid_json);
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_template_full_sections_have_instruction() {
+        let result = templates::get_template("daily_standup");
+        assert!(result.is_ok());
+        let tmpl = result.unwrap();
+        for section in &tmpl.sections {
+            assert!(!section.instruction.is_empty(),
+                "Section '{}' has empty instruction", section.title);
+        }
     }
 }
