@@ -15,6 +15,10 @@ pub struct TemplateInfo {
 
     /// Brief description of the template's purpose
     pub description: String,
+
+    /// True if this is a bundled/built-in template (can be reset to default).
+    /// False means it is a user-created custom template (can be deleted entirely).
+    pub is_bundled: bool,
 }
 
 /// Detailed template structure for preview/debugging
@@ -71,10 +75,14 @@ pub async fn api_list_templates<R: Runtime>(
 
     let template_infos: Vec<TemplateInfo> = templates
         .into_iter()
-        .map(|(id, name, description)| TemplateInfo {
-            id,
-            name,
-            description,
+        .map(|(id, name, description)| {
+            let is_bundled = templates::is_bundled_template(&id);
+            TemplateInfo {
+                id,
+                name,
+                description,
+                is_bundled,
+            }
         })
         .collect();
 
