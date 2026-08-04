@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { Pencil, RotateCcw } from 'lucide-react';
@@ -120,9 +120,9 @@ export function TemplateManagementSettings() {
   }, []);
 
   // Load on first render
-  useState(() => {
+  useEffect(() => {
     fetchTemplates();
-  });
+  }, [fetchTemplates]);
 
   const openEditor = async (templateId: string) => {
     try {
