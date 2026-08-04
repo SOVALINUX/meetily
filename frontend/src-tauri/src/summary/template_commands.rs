@@ -190,6 +190,10 @@ pub async fn api_save_custom_template<R: Runtime>(
 ) -> Result<(), String> {
     info!("api_save_custom_template called for template_id: {}", template_id);
 
+    if template_id.contains('/') || template_id.contains('\\') || template_id.contains("..") {
+        return Err("Invalid template_id: must not contain path separators or '..'".to_string());
+    }
+
     // Validate before writing
     templates::validate_and_parse_template(&template_json)?;
 
@@ -210,13 +214,18 @@ pub async fn api_save_custom_template<R: Runtime>(
 /// Deletes the custom template override for the given template_id.
 ///
 /// Used to "Reset to Default" — removes the user's custom file so the
-/// bundled or built-in version is used again. No-ops if no custom file exists.
+/// bundled or built-in version is used again. Returns true if a file was
+/// deleted, false if no custom override existed.
 #[tauri::command]
 pub async fn api_delete_custom_template<R: Runtime>(
     _app: tauri::AppHandle<R>,
     template_id: String,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     info!("api_delete_custom_template called for template_id: {}", template_id);
+
+    if template_id.contains('/') || template_id.contains('\\') || template_id.contains("..") {
+        return Err("Invalid template_id: must not contain path separators or '..'".to_string());
+    }
 
     let custom_dir = templates::get_custom_templates_dir()
         .ok_or_else(|| "Could not determine custom templates directory".to_string())?;
@@ -227,11 +236,11 @@ pub async fn api_delete_custom_template<R: Runtime>(
         fs::remove_file(&template_path)
             .map_err(|e| format!("Failed to delete custom template: {}", e))?;
         info!("Deleted custom template override for '{}'", template_id);
+        Ok(true)
     } else {
         info!("No custom override found for '{}', nothing to delete", template_id);
+        Ok(false)
     }
-
-    Ok(())
 }
 
 #[cfg(test)]

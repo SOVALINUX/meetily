@@ -178,10 +178,16 @@ export function TemplateManagementSettings() {
 
   const handleReset = async (templateId: string, templateName: string) => {
     try {
-      await invoke('api_delete_custom_template', { templateId });
-      toast.success('Template reset', {
-        description: `"${templateName}" has been reset to the default.`,
-      });
+      const wasDeleted = await invoke<boolean>('api_delete_custom_template', { templateId });
+      if (wasDeleted) {
+        toast.success('Template reset', {
+          description: `"${templateName}" has been reset to the default.`,
+        });
+      } else {
+        toast.info('No custom changes to reset', {
+          description: `"${templateName}" is already using the default.`,
+        });
+      }
       fetchTemplates();
     } catch (err) {
       console.error('Failed to reset template:', err);
