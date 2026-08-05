@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-import { Pencil, RotateCcw, Trash2, Plus, X } from 'lucide-react';
+import { Pencil, RotateCcw, Trash2, Plus, X, Download, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -121,6 +121,7 @@ export function TemplateManagementSettings() {
   const [isNewTemplate, setIsNewTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -267,14 +268,113 @@ export function TemplateManagementSettings() {
     }
   };
 
+  const handleExport = async (templateId: string, templateName: string) => {
+    try {
+      const full = await invoke<TemplateFullDetails>('api_get_template_full', { templateId });
+      const exportData = {
+        name: full.name,
+        description: full.description,
+        sections: full.sections,
+      };
+      const json = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${templateId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Template exported', {
+        description: `"${templateName}" saved as ${templateId}.json`,
+      });
+    } catch (err) {
+      console.error('Failed to export template:', err);
+      toast.error('Failed to export template');
+    }
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset so the same file can be re-imported later
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const json = ev.target?.result as string;
+        const parsed = JSON.parse(json);
+
+        // Basic shape check
+        if (typeof parsed.name !== 'string' || !Array.isArray(parsed.sections)) {
+          toast.error('Invalid template file', {
+            description: 'File must contain "name" (string) and "sections" (array).',
+          });
+          return;
+        }
+
+        // Derive an initial ID from the file name (strip .json, lowercase, replace non-alnum with _)
+        const rawName = file.name.replace(/\.json$/i, '');
+        const suggestedId = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+        const draft: TemplateFullDetails = {
+          id: suggestedId,
+          name: parsed.name || '',
+          description: parsed.description || '',
+          sections: (parsed.sections as any[]).map((s) => ({
+            title: s.title || '',
+            instruction: s.instruction || '',
+            format: ['paragraph', 'list', 'string'].includes(s.format) ? s.format : 'paragraph',
+            item_format: s.item_format,
+            example_item_format: s.example_item_format,
+          })),
+        };
+
+        if (draft.sections.length === 0) {
+          draft.sections = [{ ...EMPTY_SECTION }];
+        }
+
+        setEditingTemplate(draft);
+        setIsNewTemplate(true);
+        setDialogOpen(true);
+        toast.info('Template imported — review and save', {
+          description: 'The template has been loaded into the editor. Adjust the ID if needed.',
+        });
+      } catch {
+        toast.error('Failed to parse template file', {
+          description: 'Make sure the file is valid JSON.',
+        });
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-lg font-semibold text-gray-900">Summary Templates</h3>
-        <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={openNewTemplate}>
-          <Plus className="w-3 h-3" />
-          New Template
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-xs gap-1"
+            onClick={() => importInputRef.current?.click()}
+          >
+            <Upload className="w-3 h-3" />
+            Import
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={openNewTemplate}>
+            <Plus className="w-3 h-3" />
+            New Template
+          </Button>
+        </div>
       </div>
       <p className="text-sm text-gray-600 mb-4">
         Edit the instructions each template section gives to the AI. Default templates can be reset; custom templates can be deleted.
@@ -322,6 +422,15 @@ export function TemplateManagementSettings() {
                     Delete
                   </Button>
                 )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-gray-500 hover:text-gray-700"
+                  onClick={() => handleExport(tmpl.id, tmpl.name)}
+                  title="Export template as JSON"
+                >
+                  <Download className="w-3 h-3" />
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

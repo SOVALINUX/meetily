@@ -1,7 +1,7 @@
 use crate::summary::templates;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use tauri::Runtime;
+use tauri::{Emitter, Runtime};
 use tracing::{info, warn};
 
 /// Template metadata for UI display
@@ -192,7 +192,7 @@ pub async fn api_get_template_full<R: Runtime>(
 /// with an existing bundled ID overrides it for this user.
 #[tauri::command]
 pub async fn api_save_custom_template<R: Runtime>(
-    _app: tauri::AppHandle<R>,
+    app: tauri::AppHandle<R>,
     template_id: String,
     template_json: String,
 ) -> Result<(), String> {
@@ -216,6 +216,10 @@ pub async fn api_save_custom_template<R: Runtime>(
         .map_err(|e| format!("Failed to write template file: {}", e))?;
 
     info!("Saved custom template '{}' to {:?}", template_id, template_path);
+
+    // Notify all windows that the templates list has changed
+    let _ = app.emit("templates-changed", ());
+
     Ok(())
 }
 
@@ -226,7 +230,7 @@ pub async fn api_save_custom_template<R: Runtime>(
 /// deleted, false if no custom override existed.
 #[tauri::command]
 pub async fn api_delete_custom_template<R: Runtime>(
-    _app: tauri::AppHandle<R>,
+    app: tauri::AppHandle<R>,
     template_id: String,
 ) -> Result<bool, String> {
     info!("api_delete_custom_template called for template_id: {}", template_id);
@@ -244,6 +248,10 @@ pub async fn api_delete_custom_template<R: Runtime>(
         fs::remove_file(&template_path)
             .map_err(|e| format!("Failed to delete custom template: {}", e))?;
         info!("Deleted custom template override for '{}'", template_id);
+
+        // Notify all windows that the templates list has changed
+        let _ = app.emit("templates-changed", ());
+
         Ok(true)
     } else {
         info!("No custom override found for '{}', nothing to delete", template_id);
