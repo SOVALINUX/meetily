@@ -82,6 +82,8 @@ interface ConfigContextType {
   // Summary configuration
   isAutoSummary: boolean;
   toggleIsAutoSummary: (checked: boolean) => void;
+  defaultTemplateId: string;
+  setDefaultTemplateId: (id: string) => void;
 
   // Provider-specific API keys
   providerApiKeys: {
@@ -194,6 +196,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       return saved !== null ? saved === 'true' : false
     }
     return false;
+  });
+
+  const [defaultTemplateId, setDefaultTemplateIdState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('defaultTemplateId') || 'standard_meeting';
+    }
+    return 'standard_meeting';
   });
 
   // Beta features state (localStorage)
@@ -422,6 +431,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const setDefaultTemplateId = useCallback((id: string) => {
+    setDefaultTemplateIdState(id);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('defaultTemplateId', id);
+    }
+  }, [])
+
   // Toggle beta feature with localStorage persistence and analytics
   const toggleBetaFeature = useCallback((featureKey: BetaFeatureKey, enabled: boolean) => {
     setBetaFeatures(prev => {
@@ -575,6 +591,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     setModelConfig,
     isAutoSummary,
     toggleIsAutoSummary,
+    defaultTemplateId,
+    setDefaultTemplateId,
     providerApiKeys,
     updateProviderApiKey,
     transcriptModelConfig,
@@ -604,6 +622,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     modelConfig,
     isAutoSummary,
     toggleIsAutoSummary,
+    defaultTemplateId,
+    setDefaultTemplateId,
     providerApiKeys,
     updateProviderApiKey,
     transcriptModelConfig,
