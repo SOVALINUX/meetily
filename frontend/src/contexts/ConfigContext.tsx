@@ -85,6 +85,10 @@ interface ConfigContextType {
   defaultTemplateId: string;
   setDefaultTemplateId: (id: string) => void;
 
+  // Recording deletion
+  deleteFilesOnDelete: boolean;
+  toggleDeleteFilesOnDelete: (checked: boolean) => void;
+
   // Provider-specific API keys
   providerApiKeys: {
     claude: string | null;
@@ -203,6 +207,14 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       return localStorage.getItem('defaultTemplateId') || 'standard_meeting';
     }
     return 'standard_meeting';
+  });
+
+  const [deleteFilesOnDelete, setDeleteFilesOnDeleteState] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('deleteFilesOnDelete');
+      return saved === 'true';
+    }
+    return false;
   });
 
   // Beta features state (localStorage)
@@ -438,6 +450,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const toggleDeleteFilesOnDelete = useCallback((checked: boolean) => {
+    setDeleteFilesOnDeleteState(checked);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('deleteFilesOnDelete', checked.toString());
+    }
+  }, [])
+
   // Toggle beta feature with localStorage persistence and analytics
   const toggleBetaFeature = useCallback((featureKey: BetaFeatureKey, enabled: boolean) => {
     setBetaFeatures(prev => {
@@ -593,6 +612,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     toggleIsAutoSummary,
     defaultTemplateId,
     setDefaultTemplateId,
+    deleteFilesOnDelete,
+    toggleDeleteFilesOnDelete,
     providerApiKeys,
     updateProviderApiKey,
     transcriptModelConfig,
@@ -624,6 +645,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     toggleIsAutoSummary,
     defaultTemplateId,
     setDefaultTemplateId,
+    deleteFilesOnDelete,
+    toggleDeleteFilesOnDelete,
     providerApiKeys,
     updateProviderApiKey,
     transcriptModelConfig,
