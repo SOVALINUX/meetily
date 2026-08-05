@@ -121,6 +121,7 @@ export function TemplateManagementSettings() {
   const [isNewTemplate, setIsNewTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const fetchTemplates = useCallback(async () => {
@@ -254,12 +255,18 @@ export function TemplateManagementSettings() {
     }
   };
 
-  const handleDelete = async (templateId: string, templateName: string) => {
-    if (!confirm(`Delete custom template "${templateName}"? This cannot be undone.`)) return;
+  const handleDelete = (templateId: string, templateName: string) => {
+    setDeleteConfirm({ id: templateId, name: templateName });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    const { id, name } = deleteConfirm;
+    setDeleteConfirm(null);
     try {
-      await invoke<boolean>('api_delete_custom_template', { templateId });
+      await invoke<boolean>('api_delete_custom_template', { templateId: id });
       toast.success('Template deleted', {
-        description: `"${templateName}" has been deleted.`,
+        description: `"${name}" has been deleted.`,
       });
       fetchTemplates();
     } catch (err) {
@@ -536,6 +543,27 @@ export function TemplateManagementSettings() {
             </Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving…' : isNewTemplate ? 'Create Template' : 'Save Template'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete template?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            <span className="font-medium">"{deleteConfirm?.name}"</span> will be permanently deleted.
+            This cannot be undone.
+          </p>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
