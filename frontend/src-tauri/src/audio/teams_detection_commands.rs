@@ -49,7 +49,7 @@ pub async fn set_teams_detection_enabled(
 ///
 /// Windows/Linux: polls the process list every 5 seconds.
 pub fn spawn_teams_detection_task<R: Runtime + 'static>(app: AppHandle<R>) {
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         run_teams_detection_loop(app).await;
     });
 }
