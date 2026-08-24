@@ -1,14 +1,15 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
-use tracing::{info, warn};
 
 use crate::database::repositories::setting::SettingsRepository;
 use crate::state::AppState;
 
-use super::teams_detector::{detect_teams_audio_active, detect_teams_process_running};
+#[cfg(target_os = "macos")]
+use super::teams_detector::detect_teams_audio_active;
+#[cfg(not(target_os = "macos"))]
+use super::teams_detector::detect_teams_process_running;
 
 /// Global flag tracking whether Teams audio was active in the last poll (macOS).
 static TEAMS_AUDIO_WAS_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -84,15 +85,21 @@ async fn run_teams_detection_loop<R: Runtime>(app: AppHandle<R>) {
     // so we also detect Teams-end here: when Teams drops out of the current app list while other
     // apps keep audio active (music, browser tabs, etc.). This handles the common case where
     // `system-audio-stopped` is never emitted because background audio keeps playing.
+    log::info!("teams_detection: registering system-audio event listeners (macOS)");
+
     let _start_id = app.listen("system-audio-started", move |event| {
         let app = app_for_start.clone();
         let payload = event.payload().to_string();
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
+            log::debug!("teams_detection: system-audio-started fired, payload={}", payload);
             if !is_detection_enabled(&app).await {
+                log::debug!("teams_detection: detection disabled, ignoring system-audio-started");
                 return;
             }
             let apps: Vec<String> = serde_json::from_str(&payload).unwrap_or_default();
+            log::info!("teams_detection: active audio apps = {:?}", apps);
             let teams_active = detect_teams_audio_active(&apps);
+            log::debug!("teams_detection: teams_active={}", teams_active);
 
             let was_active = TEAMS_AUDIO_WAS_ACTIVE.swap(teams_active, Ordering::SeqCst);
 
@@ -103,7 +110,7 @@ async fn run_teams_detection_loop<R: Runtime>(app: AppHandle<R>) {
                     .cloned()
                     .unwrap_or_else(|| "Microsoft Teams".to_string());
 
-                info!("teams_detection: Teams meeting started (app: {})", app_name);
+                log::info!("teams_detection: Teams meeting started (app: {})", app_name);
 
                 if !is_recording_active().await && app.try_state::<AppState>().is_some() {
                     let prefs = crate::audio::recording_preferences::load_recording_preferences(&app)
@@ -117,28 +124,31 @@ async fn run_teams_detection_loop<R: Runtime>(app: AppHandle<R>) {
                     )
                     .await
                     {
-                        warn!("teams_detection: failed to auto-start recording: {}", e);
+                        log::warn!("teams_detection: failed to auto-start recording: {}", e);
                     }
                 }
 
                 let _ = app.emit("teams-meeting-started", serde_json::json!({ "app_name": app_name }));
             } else if !teams_active && was_active {
-                // Teams dropped off the audio app list while other apps keep audio alive.
-                info!("teams_detection: Teams meeting ended (Teams left active audio list)");
+                log::info!("teams_detection: Teams meeting ended (Teams left active audio list)");
                 let _ = app.emit("teams-meeting-ended", serde_json::json!({}));
+            } else {
+                log::debug!("teams_detection: no state change (teams_active={}, was_active={})", teams_active, was_active);
             }
         });
     });
 
     let _stop_id = app.listen("system-audio-stopped", move |_event| {
         let app = app_for_stop.clone();
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
+            log::debug!("teams_detection: system-audio-stopped fired");
             if !is_detection_enabled(&app).await {
+                log::debug!("teams_detection: detection disabled, ignoring system-audio-stopped");
                 return;
             }
             let was_active = TEAMS_AUDIO_WAS_ACTIVE.swap(false, Ordering::SeqCst);
             if was_active {
-                info!("teams_detection: Teams meeting ended (audio stopped)");
+                log::info!("teams_detection: Teams meeting ended (audio stopped)");
                 let _ = app.emit("teams-meeting-ended", serde_json::json!({}));
             }
         });
@@ -170,13 +180,14 @@ async fn run_teams_detection_loop<R: Runtime>(app: AppHandle<R>) {
             .await
             .unwrap_or(false);
 
+        log::debug!("teams_detection: poll — running={}", running);
+
         let was_running = TEAMS_PROCESS_WAS_RUNNING.load(Ordering::SeqCst);
 
         if running && !was_running {
-            // Transition: not running → running
             TEAMS_PROCESS_WAS_RUNNING.store(true, Ordering::SeqCst);
             debounce_counter = 0;
-            info!("teams_detection: Teams process started");
+            log::info!("teams_detection: Teams process started");
 
             if !is_recording_active().await {
                 let prefs = crate::audio::recording_preferences::load_recording_preferences(&app)
@@ -190,22 +201,21 @@ async fn run_teams_detection_loop<R: Runtime>(app: AppHandle<R>) {
                 )
                 .await
                 {
-                    warn!("teams_detection: failed to auto-start recording: {}", e);
+                    log::warn!("teams_detection: failed to auto-start recording: {}", e);
                 }
             }
 
             let _ = app.emit("teams-meeting-started", serde_json::json!({ "app_name": "Microsoft Teams" }));
         } else if !running && was_running {
-            // Transition: running → not running (debounce)
             debounce_counter += 1;
+            log::debug!("teams_detection: Teams stopped, debounce {}/{}", debounce_counter, STOP_DEBOUNCE_POLLS);
             if debounce_counter >= STOP_DEBOUNCE_POLLS {
                 TEAMS_PROCESS_WAS_RUNNING.store(false, Ordering::SeqCst);
                 debounce_counter = 0;
-                info!("teams_detection: Teams process stopped (debounced)");
+                log::info!("teams_detection: Teams process stopped (debounced)");
                 let _ = app.emit("teams-meeting-ended", serde_json::json!({}));
             }
         } else {
-            // Still in same state — reset debounce if running
             if running {
                 debounce_counter = 0;
             }
