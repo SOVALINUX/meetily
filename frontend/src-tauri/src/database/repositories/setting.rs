@@ -353,7 +353,7 @@ impl SettingsRepository {
             sqlx::query_as("SELECT autoDetectTeamsEnabled FROM settings WHERE id = '1'")
                 .fetch_optional(pool)
                 .await?;
-        Ok(row.map(|(v,)| v != 0).unwrap_or(false))
+        Ok(row.map(|(v,)| v != 0).unwrap_or(true))
     }
 
     pub async fn set_teams_detection_enabled(

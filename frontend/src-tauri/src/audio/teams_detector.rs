@@ -1,20 +1,28 @@
-/// Known MS Teams application display names (macOS) — matched against system audio app list
-const TEAMS_APP_NAMES: &[&str] = &[
-    "Microsoft Teams",
-    "Microsoft Teams (work or school)",
-    "Teams",
-];
+/// Prefix patterns — any app whose name starts with one of these is considered Teams.
+/// Covers variants like "Microsoft Teams WebView", "Microsoft Teams (work or school)", etc.
+const TEAMS_APP_PREFIXES: &[&str] = &["microsoft teams", "teams"];
+
+/// Substrings that indicate a Teams audio source that is NOT a real call
+/// (e.g. notification chimes). These are excluded even if the prefix matches.
+const TEAMS_APP_EXCLUSIONS: &[&str] = &["notification center"];
 
 /// Known MS Teams process names (Windows/Linux) — matched against running process list
 #[cfg(not(target_os = "macos"))]
 const TEAMS_PROCESS_NAMES: &[&str] = &["ms-teams.exe", "Teams.exe", "teams", "teams-for-linux"];
 
 /// Returns true if the given app display name corresponds to MS Teams.
+/// Uses prefix matching so variants like "Microsoft Teams WebView" are correctly
+/// identified, while excluding notification-only sources like
+/// "Microsoft Teams (Notification Center)".
 pub fn is_teams_app_name(name: &str) -> bool {
     let lower = name.to_lowercase();
-    TEAMS_APP_NAMES
+    let matches_prefix = TEAMS_APP_PREFIXES
         .iter()
-        .any(|known| lower == known.to_lowercase())
+        .any(|prefix| lower.starts_with(prefix));
+    let is_excluded = TEAMS_APP_EXCLUSIONS
+        .iter()
+        .any(|excl| lower.contains(excl));
+    matches_prefix && !is_excluded
 }
 
 /// Returns true if any app in `apps` is MS Teams (macOS audio-based detection).
@@ -52,6 +60,8 @@ mod tests {
         assert!(is_teams_app_name("microsoft teams")); // case-insensitive
         assert!(is_teams_app_name("Teams"));
         assert!(is_teams_app_name("Microsoft Teams (work or school)"));
+        assert!(is_teams_app_name("Microsoft Teams WebView"));
+        assert!(!is_teams_app_name("Microsoft Teams (Notification Center)")); // notification sounds, not a call
         assert!(!is_teams_app_name("Spotify"));
         assert!(!is_teams_app_name("Zoom"));
         assert!(!is_teams_app_name("Google Chrome"));
