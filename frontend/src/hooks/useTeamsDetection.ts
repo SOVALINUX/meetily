@@ -5,7 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
 const COUNTDOWN_SECONDS = 15;
-const START_POPUP_DISMISS_MS = 5000;
+const START_POPUP_DISMISS_MS = 30000; // 30s — user needs time to decide
 
 export interface UseTeamsDetectionReturn {
   showStartPopup: boolean;
@@ -14,6 +14,7 @@ export interface UseTeamsDetectionReturn {
   teamsDetectionEnabled: boolean;
   setTeamsDetectionEnabled: (enabled: boolean) => Promise<void>;
   dismissStartPopup: () => void;
+  handleStart: () => Promise<void>;
   handleStop: () => void;
   handleContinue: () => void;
 }
@@ -55,18 +56,12 @@ export function useTeamsDetection(
       .catch(() => {});
   }, []);
 
-  // Handle teams-meeting-started event
+  // Handle teams-meeting-started event — show popup only, never auto-start recording
   useEffect(() => {
     let unlisten: (() => void) | null = null;
 
-    listen<{ app_name: string }>('teams-meeting-started', async () => {
-      if (!isRecordingRef.current) {
-        try {
-          await onStart();
-        } catch {
-          // auto-start failure is non-fatal
-        }
-      }
+    listen<{ app_name: string }>('teams-meeting-started', () => {
+      if (isRecordingRef.current) return; // already recording, nothing to offer
       clearStartDismiss();
       setShowStartPopup(true);
       startDismissRef.current = setTimeout(() => {
@@ -75,7 +70,7 @@ export function useTeamsDetection(
     }).then(fn => { unlisten = fn; });
 
     return () => { unlisten?.(); clearStartDismiss(); };
-  }, [onStart, clearStartDismiss]);
+  }, [clearStartDismiss]);
 
   // Handle teams-meeting-ended event
   useEffect(() => {
@@ -123,6 +118,12 @@ export function useTeamsDetection(
     setShowStartPopup(false);
   }, [clearStartDismiss]);
 
+  const handleStart = useCallback(async () => {
+    clearStartDismiss();
+    setShowStartPopup(false);
+    await onStart();
+  }, [clearStartDismiss, onStart]);
+
   const handleStop = useCallback(() => {
     clearCountdown();
     setShowEndPopup(false);
@@ -146,6 +147,7 @@ export function useTeamsDetection(
     teamsDetectionEnabled,
     setTeamsDetectionEnabled,
     dismissStartPopup,
+    handleStart,
     handleStop,
     handleContinue,
   };

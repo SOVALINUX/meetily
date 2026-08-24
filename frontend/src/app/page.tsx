@@ -273,6 +273,7 @@ export default function Home() {
         {teamsDetection.showStartPopup && (
           <TeamsDetectionPopup
             variant="started"
+            onStart={teamsDetection.handleStart}
             onDismiss={teamsDetection.dismissStartPopup}
             sidebarCollapsed={sidebarCollapsed}
           />

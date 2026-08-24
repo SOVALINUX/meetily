@@ -67,10 +67,6 @@ async fn is_detection_enabled<R: Runtime>(app: &AppHandle<R>) -> bool {
     }
 }
 
-async fn is_recording_active() -> bool {
-    crate::audio::recording_commands::is_recording().await
-}
-
 // ─── macOS path ─────────────────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
@@ -113,32 +109,17 @@ async fn run_teams_detection_loop<R: Runtime>(app: AppHandle<R>) {
 
                 log::info!("teams_detection: Teams meeting started (app: {})", app_name);
 
-                // Bring Meetily window to front so the popup is visible.
+                // Bring Meetily window to front so the popup is immediately visible.
                 crate::tray::focus_main_window(&app);
 
                 // Native OS notification so user is alerted even if Meetily is behind Teams.
                 let _ = app.notification()
                     .builder()
                     .title("Meetily — Meeting detected")
-                    .body("MS Teams meeting started. Starting recording…")
+                    .body("MS Teams meeting started. Click Start Recording to capture it.")
                     .show();
 
-                if !is_recording_active().await && app.try_state::<AppState>().is_some() {
-                    let prefs = crate::audio::recording_preferences::load_recording_preferences(&app)
-                        .await
-                        .unwrap_or_default();
-                    if let Err(e) = crate::audio::recording_commands::start_recording_with_devices_and_meeting(
-                        app.clone(),
-                        prefs.preferred_mic_device,
-                        prefs.preferred_system_device,
-                        Some("MS Teams Meeting".to_string()),
-                    )
-                    .await
-                    {
-                        log::warn!("teams_detection: failed to auto-start recording: {}", e);
-                    }
-                }
-
+                // Emit event — the frontend popup asks the user whether to start recording.
                 let _ = app.emit("teams-meeting-started", serde_json::json!({ "app_name": app_name }));
             } else if !teams_active && was_active {
                 log::info!("teams_detection: Teams meeting ended (Teams left active audio list)");
@@ -204,24 +185,8 @@ async fn run_teams_detection_loop<R: Runtime>(app: AppHandle<R>) {
             let _ = app.notification()
                 .builder()
                 .title("Meetily — Meeting detected")
-                .body("MS Teams meeting started. Starting recording…")
+                .body("MS Teams meeting started. Click Start Recording to capture it.")
                 .show();
-
-            if !is_recording_active().await {
-                let prefs = crate::audio::recording_preferences::load_recording_preferences(&app)
-                    .await
-                    .unwrap_or_default();
-                if let Err(e) = crate::audio::recording_commands::start_recording_with_devices_and_meeting(
-                    app.clone(),
-                    prefs.preferred_mic_device,
-                    prefs.preferred_system_device,
-                    Some("MS Teams Meeting".to_string()),
-                )
-                .await
-                {
-                    log::warn!("teams_detection: failed to auto-start recording: {}", e);
-                }
-            }
 
             let _ = app.emit("teams-meeting-started", serde_json::json!({ "app_name": "Microsoft Teams" }));
         } else if !running && was_running {

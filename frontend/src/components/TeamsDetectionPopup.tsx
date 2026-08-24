@@ -8,6 +8,7 @@ interface TeamsDetectionPopupProps {
   variant: 'started' | 'ended';
   countdown?: number;
   onDismiss?: () => void;
+  onStart?: () => Promise<void>;
   onStop?: () => void;
   onContinue?: () => void;
   sidebarCollapsed: boolean;
@@ -17,6 +18,7 @@ export const TeamsDetectionPopup: React.FC<TeamsDetectionPopupProps> = ({
   variant,
   countdown,
   onDismiss,
+  onStart,
   onStop,
   onContinue,
   sidebarCollapsed,
@@ -40,19 +42,41 @@ export const TeamsDetectionPopup: React.FC<TeamsDetectionPopupProps> = ({
           }`}
         >
           {variant === 'started' ? (
-            <div className="bg-white border border-green-200 rounded-full shadow-lg px-4 py-2 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse flex-shrink-0" />
-              <Video className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
-              <span className="text-sm text-gray-700">
-                MS Teams meeting detected — recording started
-              </span>
-              <button
-                onClick={onDismiss}
-                aria-label="Dismiss"
-                className="text-gray-400 hover:text-gray-600 transition-colors p-0.5 rounded hover:bg-gray-100 ml-1"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+            <div className="bg-white border border-green-200 rounded-lg shadow-lg p-3 w-72">
+              <div className="flex items-start justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse flex-shrink-0 mt-0.5" />
+                  <Video className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                  <span className="text-sm font-semibold text-gray-900">MS Teams meeting detected</span>
+                </div>
+                <button
+                  onClick={onDismiss}
+                  aria-label="Dismiss"
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-0.5 rounded hover:bg-gray-100 -mt-0.5 -mr-0.5"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mb-3 ml-5">Would you like to record this meeting?</p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={onStart}
+                  className="flex-1 h-7 text-xs bg-green-600 hover:bg-green-700"
+                >
+                  <Video className="h-3 w-3 mr-1" />
+                  Start Recording
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={onDismiss}
+                  className="flex-1 h-7 text-xs"
+                >
+                  Dismiss
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-72">
