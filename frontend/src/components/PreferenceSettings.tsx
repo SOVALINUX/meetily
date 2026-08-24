@@ -21,22 +21,6 @@ export function PreferenceSettings() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [previousNotificationsEnabled, setPreviousNotificationsEnabled] = useState<boolean | null>(null);
   const hasTrackedViewRef = useRef(false);
-  const [autoDetectCalls, setAutoDetectCalls] = useState(true);
-
-  useEffect(() => {
-    invoke<boolean>('get_teams_detection_enabled')
-      .then(setAutoDetectCalls)
-      .catch(() => {});
-  }, []);
-
-  const handleAutoDetectChange = async (value: boolean) => {
-    setAutoDetectCalls(value);
-    try {
-      await invoke('set_teams_detection_enabled', { enabled: value });
-    } catch {
-      setAutoDetectCalls(!value);
-    }
-  };
 
   // Lazy load preferences on mount (only loads if not already cached)
   useEffect(() => {
@@ -233,20 +217,6 @@ export function PreferenceSettings() {
           <p className="text-xs text-blue-800">
             <strong>Note:</strong> Database and models are stored together in your application data directory for unified management.
           </p>
-        </div>
-      </div>
-
-      {/* Recording Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Recording</h3>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-900">Auto detect calls</p>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Automatically start recording when a call is detected and prompt to stop when it ends
-            </p>
-          </div>
-          <Switch checked={autoDetectCalls} onCheckedChange={handleAutoDetectChange} />
         </div>
       </div>
 
