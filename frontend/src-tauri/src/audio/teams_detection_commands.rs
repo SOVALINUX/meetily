@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri_plugin_notification::NotificationExt;
 
 use crate::database::repositories::setting::SettingsRepository;
 use crate::state::AppState;
@@ -112,6 +113,16 @@ async fn run_teams_detection_loop<R: Runtime>(app: AppHandle<R>) {
 
                 log::info!("teams_detection: Teams meeting started (app: {})", app_name);
 
+                // Bring Meetily window to front so the popup is visible.
+                crate::tray::focus_main_window(&app);
+
+                // Native OS notification so user is alerted even if Meetily is behind Teams.
+                let _ = app.notification()
+                    .builder()
+                    .title("Meetily — Meeting detected")
+                    .body("MS Teams meeting started. Starting recording…")
+                    .show();
+
                 if !is_recording_active().await && app.try_state::<AppState>().is_some() {
                     let prefs = crate::audio::recording_preferences::load_recording_preferences(&app)
                         .await
@@ -188,6 +199,13 @@ async fn run_teams_detection_loop<R: Runtime>(app: AppHandle<R>) {
             TEAMS_PROCESS_WAS_RUNNING.store(true, Ordering::SeqCst);
             debounce_counter = 0;
             log::info!("teams_detection: Teams process started");
+
+            crate::tray::focus_main_window(&app);
+            let _ = app.notification()
+                .builder()
+                .title("Meetily — Meeting detected")
+                .body("MS Teams meeting started. Starting recording…")
+                .show();
 
             if !is_recording_active().await {
                 let prefs = crate::audio::recording_preferences::load_recording_preferences(&app)
